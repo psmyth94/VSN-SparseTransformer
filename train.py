@@ -14,10 +14,15 @@ def positional_encoding(position, d_model):
 
     return tf.cast(pos_encoding, dtype=tf.float32)
 
-def build_model(d_model, seq_len, num_features, num_cat = 0, dropout_rate = 0.1, num_classes = 1, use_time_distributed = True):
+def build_model(d_model, lr, seq_len, num_features, num_cat = 0, dropout_rate = 0.1, num_classes = 1, use_time_distributed = True,
+               total_iterations = 10000, cycle_length = 7000, div_factor = 10., epoch_decay = 1.0):
     """
     input should be (batch_size, seq_len, num_features) and categorical data should be placed first in last dimenstion
     that is: input[:,:,:num_cat] contains categorical variables and input[:,:,num_cat:] contains continuous
+    total_iterations: the total number of steps before the cycle repeats.
+    cycle_length: the number of steps before the lr starts to decay exponentially
+    div_factor: the range of lr is lr/div_factor to lr.
+    epoch_decay: after a cycle, lr will decay by lr*epoch_decay**(total_iterations//current_step). If epoch == 1., no decay occurs.
     """
     tf.keras.layers.Input(shape=(seq_len, num_features))
     
@@ -73,11 +78,13 @@ def build_model(d_model, seq_len, num_features, num_cat = 0, dropout_rate = 0.1,
     outputs = tf.keras.layers.Dense(num_classes, activation="sigmoid")(x)
 
     model = tf.keras.Model(inputs=inp, outputs=outputs)
-    opt = tfa.optimizers.AdamW(learning_rate = lr, weight_decay = 1e-4)
-    # opt = OneCycleAdam(learning_rate = lr, cycle_length = cycle_length, #weight_decay = 0.0001,
-    #                    total_iterations = total_iterations, div_factor = div_factor,
-    #                    epoch_decay = epoch_decay)
-    loss = tf.keras.losses.BinaryCrossentropy()
+    opt = CLRAdam(learning_rate = lr, cycle_length = cycle_length,
+                  total_iterations = total_iterations, div_factor = div_factor,
+                  epoch_decay = epoch_decay)
+    if num_classes == 1:
+        loss = tf.keras.losses.BinaryCrossentropy()
+    else:
+        loss = tf.keras.losses.CategoricalCrossentropy()
     model.compile(loss=loss, optimizer = opt, sample_weight_mode = "temporal")
 
     return model
