@@ -5,10 +5,11 @@ The idea behind this is that the variable selection network will negate the infl
 informative time steps. Since these are computationally expensive, the model uses a cyclical learning rate similar to [fastai's one cycle policy](https://www.fast.ai/2018/07/02/adam-weight-decay/) to achieve superconvergence in few epochs.
 
 ## Installation
+This library has only been tested on linux
 ```bash
-git clone https://github.com/psmyth/vsn-sparse-transformer.git
-cd vsn-sparse-transformer
-conda env create -f environment.yml
+git clone https://github.com/psmyth94/VSN-SparseTransformer.git
+cd VSN-SparseTransformer
+source install.sh
 ```
 
 ## Usage
