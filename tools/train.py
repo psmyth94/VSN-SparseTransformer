@@ -1,21 +1,6 @@
-# VSN-SparseTransformer
-This is a combination of the variable selection network from [Temporal Fusion Transformers for interpretable multi-horizon time series forecasting](https://www.sciencedirect.com/science/article/pii/S0169207021000637#b15)
-and the sparse attention layer from [Temporal Convolutional Attention Neural Networks for Time Series Forecasting](https://ieeexplore.ieee.org/abstract/document/9534351) for time series classification.
-The idea behind this is that the variable selection network will negate the influence of uninformative features while the sparse attention network will select the most
-informative time steps. Since these are computationally expensive, the model uses a cyclical learning rate similar to [fastai's one cycle policy](https://www.fast.ai/2018/07/02/adam-weight-decay/) to achieve superconvergence in few epochs.
-
-## Installation
-```bash
-git clone https://github.com/psmyth/vsn-sparse-transformer.git
-cd vsn-sparse-transformer
-conda env create -f environment.yml
-```
-
-## Usage
-```python
-# from tools/train.py
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras.backend as K
 from vsnst import (
     CLRAdam,
     GatedLinearUnit,
@@ -24,9 +9,20 @@ from vsnst import (
     VariableSelection,
 )
 
+
 def get_angles(pos, i, d_model):
+    """
+    calculate the angle rates for the positional encoding
+
+    Args:
+        pos (np.array): Should be of shape (seq_len, 1)
+        i (np.array): Should be of shape (1, d_model)
+        d_model (int): The dimension of the model
+    """
+
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
     return pos * angle_rates
+
 
 def positional_encoding(position, d_model):
     angle_rads = get_angles(
@@ -38,6 +34,7 @@ def positional_encoding(position, d_model):
     pos_encoding = angle_rads[np.newaxis, ...]
 
     return tf.cast(pos_encoding, dtype=tf.float32)
+
 
 def build_model(
     d_model,
@@ -57,6 +54,30 @@ def build_model(
     div_factor=10.0,
     epoch_decay=1.0,
 ):
+    """
+    The model builder function
+
+    Args:
+        d_model (int): The dimension of the model
+        lr (float): The learning rate
+        seq_len (int): The sequence length
+        num_features (int): The number of features
+        num_cat (int): The number of categorical features
+        num_heads (int): The number of attention heads
+        num_layers (int): The number of layers
+        num_units (int): The number of units
+        num_gated_units (int): The number of gated units
+        dropout_rate (float): The dropout rate
+        num_classes (int): The number of classes
+        use_time_distributed (bool): Whether to use time distributed layer
+        total_iterations (int): The total number of iterations
+        cycle_length (int): The cycle length
+        div_factor (float): The division factor
+        epoch_decay (float): The epoch decay
+
+    Returns:
+        tf.keras.Model: The model
+    """
     tf.keras.layers.Input(shape=(seq_len, num_features))
 
     inp = tf.keras.layers.Input(shape=(seq_len, num_features))
@@ -107,6 +128,10 @@ def build_model(
     x = tf.keras.layers.LayerNormalization()(x + skip)
 
     x = tf.keras.layers.GlobalMaxPooling1D()(x)
+    # didn't end up using this
+    # x = GatedResidualNetwork(d_model,
+    #                          dropout_rate=dropout_rate,
+    #                          use_time_distributed=False)(x)
     outputs = tf.keras.layers.Dense(num_classes, activation="sigmoid")(x)
 
     model = tf.keras.Model(inputs=inp, outputs=outputs)
@@ -124,34 +149,3 @@ def build_model(
     model.compile(loss=loss, optimizer=opt, sample_weight_mode="temporal")
 
     return model
-
-# Test case
-def test_build_model():
-d_model = 32
-lr = 0.001
-seq_len = 50
-num_features = 10
-num_cat = 2
-num_classes = 1
-
-# Generate random data
-X_train = np.random.randint(0, 10, (100, seq_len, num_features)).astype(np.float32)
-y_train = np.random.randint(0, 2, (100, num_classes)).astype(np.float32)
-
-# Build the model
-model = build_model(
-    d_model=d_model,
-    lr=lr,
-    seq_len=seq_len,
-    num_features=num_features,
-    num_cat=num_cat,
-    num_classes=num_classes,
-)
-
-# Print model summary
-model.summary()
-
-# Train the model
-model.fit(X_train, y_train, epochs=5, batch_size=16)
-```
-
