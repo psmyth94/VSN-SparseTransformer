@@ -126,8 +126,6 @@ def build_model(
 
     return model
 
-# Test case
-def test_build_model():
 d_model = 32
 lr = 0.001
 seq_len = 50
